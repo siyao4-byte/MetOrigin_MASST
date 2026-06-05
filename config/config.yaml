@@ -1,0 +1,43 @@
+# MAPS -> MetOriginDB matching configuration
+
+maps_annotation_file: data/maps/final-annotation-df.csv
+metorigin_file: data/metorigin/MetOriginDB.csv
+
+output_dir: outputs/metorigin_matches
+qc_dir: outputs/qc_reports
+log_dir: outputs/logs
+
+matched_output_file: MAPS_with_MetOriginDB_origin.csv
+summary_output_file: metorigin_matching_summary.csv
+unmatched_output_file: metorigin_unmatched_features.csv
+column_detection_report_file: metorigin_column_detection_report.txt
+
+output_file: outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
+summary_file: outputs/qc_reports/metorigin_matching_summary.csv
+unmatched_file: outputs/qc_reports/metorigin_unmatched_features.csv
+column_report_file: outputs/qc_reports/metorigin_column_detection_report.txt
+log_file: outputs/logs/metorigin_match.log
+
+matching_priority:
+  - cid
+  - smiles
+  - inchikey
+  - hmdb
+  - kegg
+  - compound_name
+
+deduplicate_metorigin_by_key: true
+case_insensitive_name_matching: true
+exact_smiles_only: true
+
+domainmasst:
+  input_mgf: data/mgf/data_iimn_gnps.mgf
+  output_dir: outputs/domainmasst_unmatched_ms2
+  upstream_code_dir: external/microbe_masst/code
+  python_version: "3.10"
+  min_cos: 0.7
+  mz_tol: 0.02
+  precursor_mz_tol: 0.02
+  min_matched_signals: 3
+  parallel_queries: 5
+  analog: false

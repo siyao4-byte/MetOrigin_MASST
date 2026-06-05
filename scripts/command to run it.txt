@@ -1,0 +1,24 @@
+# Recommended workflow front door
+
+# Mode 1: HGMD input. This finds HGMD_xxxx* under:
+# Y:\MA_BPA_Microbiome\LCMS data
+# then copies final-annotation-df.csv and mzmine\data_iimn_gnps.mgf into data/.
+# After the run, outputs are saved under runs\HGMD_1047\.
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --hgmd HGMD_1047 --interactive_run_prompts
+
+# Mode 2: user input files already in data/maps and data/mgf.
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --interactive_run_prompts
+
+# Common non-interactive examples
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --hgmd HGMD_1047 --run_metorigin
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --hgmd HGMD_1047 --run_metorigin --prepare_domainmasst
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --hgmd HGMD_1047 --run_metorigin --run_domainmasst
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --hgmd HGMD_1047 --run_metorigin --run_domainmasst --run_graphs
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --run_graphs
+.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --run_label USER_TEST --save_run_outputs --run_graphs
+
+# Manual fallback commands
+.\.venv310\Scripts\python.exe scripts\metorigin_match.py --config config\config.yaml
+powershell -ExecutionPolicy Bypass -File scripts\run_domainmasst_unmatched.ps1
+powershell -ExecutionPolicy Bypass -File scripts\run_domainmasst_unmatched.ps1 -RunMasst
+"C:\Program Files\R\R-4.5.1\bin\Rscript.exe" scripts\Graph_All_compact_workflow.R

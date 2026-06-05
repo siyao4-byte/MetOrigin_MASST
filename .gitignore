@@ -1,0 +1,26 @@
+# Python environments and caches
+.venv/
+.venv310/
+__pycache__/
+*.py[cod]
+
+# Local input data and databases
+data/
+
+# Generated workflow outputs and run bundles
+outputs/
+runs/
+Graph1_MetOrigin_R_outputs/
+Graph2_domainMASST_R_outputs/
+Graph3_integrated_origin_R_outputs/
+Rplots.pdf
+*.pdf
+
+# Local copies of upstream tools
+external/
+
+# Local editor/runtime files
+.vscode/
+.Rhistory
+.RData
+.Rproj.user/
