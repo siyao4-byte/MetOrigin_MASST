@@ -24,6 +24,18 @@ The MetOrigin database should be:
 data/metorigin/MetOriginDB.csv
 ```
 
+This database is not included in this GitHub repository because the CSV is very large. Download the MetOriginDB MS1 compound database separately from the TidyMass databases page:
+
+```text
+https://www.tidymass.org/databases/
+```
+
+Choose the MetOriginDB CSV download, then place/rename it as:
+
+```text
+data/metorigin/MetOriginDB.csv
+```
+
 ## Recommended Front Door
 
 Use the setup workflow:
