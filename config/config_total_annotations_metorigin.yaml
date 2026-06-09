@@ -1,0 +1,22 @@
+# MAPS Total-List-Of-Annotations.csv -> MetOriginDB matching configuration
+
+maps_annotation_file: data/maps/Total-List-Of-Annotations.csv
+metorigin_file: data/metorigin/MetOriginDB.csv
+
+output_file: runs/Total-annotation/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
+summary_file: runs/Total-annotation/outputs/qc_reports/metorigin_matching_summary.csv
+unmatched_file: runs/Total-annotation/outputs/qc_reports/metorigin_unmatched_features.csv
+column_report_file: runs/Total-annotation/outputs/qc_reports/metorigin_column_detection_report.txt
+log_file: runs/Total-annotation/outputs/logs/metorigin_match.log
+
+matching_priority:
+  - cid
+  - smiles
+  - inchikey
+  - hmdb
+  - kegg
+  - compound_name
+
+deduplicate_metorigin_by_key: true
+case_insensitive_name_match: true
+exact_smiles_only: true

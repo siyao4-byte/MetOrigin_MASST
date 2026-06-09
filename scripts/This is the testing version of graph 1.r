@@ -71,9 +71,12 @@ library(scales)
 # 1. User settings
 # ==================================================================================================
 
-input_file <- "C:\\Users\\siyao4\\OneDrive - The University of Melbourne\\Documents\\MAPS_MetOrigin_Matching_Project\\MAPS_MetOrigin_Matching_Project\\outputs\\metorigin_matches\\MAPS_with_MetOriginDB_origin_EXCEL_PREVIEW_truncated_details.csv"
+input_file <- Sys.getenv(
+  "METORIGIN_GRAPH1_INPUT_FILE",
+  unset = "C:\\Users\\siyao4\\OneDrive - The University of Melbourne\\Documents\\MAPS_MetOrigin_Matching_Project\\MAPS_MetOrigin_Matching_Project\\outputs\\metorigin_matches\\MAPS_with_MetOriginDB_origin_EXCEL_PREVIEW_truncated_details.csv"
+)
 
-out_dir <- "Graph1_MetOrigin_R_outputs"
+out_dir <- Sys.getenv("METORIGIN_GRAPH1_OUT_DIR", unset = "Graph1_MetOrigin_R_outputs")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # -----------------------------
@@ -1152,16 +1155,27 @@ network_edges <- edge_feature_general %>%
     general_class = general_class_chr
   )
 
+feature_origin_groups <- network_edges %>%
+  mutate(origin_rank = match(general_class, origin_order)) %>%
+  group_by(from) %>%
+  summarise(
+    primary_origin = general_class[which.min(origin_rank)],
+    n_origins = n_distinct(general_class),
+    .groups = "drop"
+  )
+
 feature_nodes_network <- network_edges %>%
   distinct(name = from) %>%
-  arrange(name) %>%
+  left_join(feature_origin_groups, by = c("name" = "from")) %>%
+  mutate(primary_origin = factor(primary_origin, levels = origin_order)) %>%
+  arrange(primary_origin, desc(n_origins), name) %>%
   mutate(
     node_type = "Feature",
-    general_class = "metabolite",
+    general_class = as.character(primary_origin),
     node_label = "",
     x = cos(seq(0, 2 * pi, length.out = n() + 1)[-1]),
     y = sin(seq(0, 2 * pi, length.out = n() + 1)[-1]),
-    node_size = 0.55
+    n_features = NA_integer_
   )
 
 origin_angles <- seq(pi / 2, pi / 2 - 2 * pi, length.out = length(origin_order) + 1)[-length(origin_order) - 1]
@@ -1179,15 +1193,14 @@ origin_nodes_network <- network_edges %>%
     angle = origin_angles[as.character(general_class)],
     x = 0.43 * cos(angle),
     y = 0.43 * sin(angle),
-    node_size = scales::rescale(n_features, to = c(8, 18))
   ) %>%
-  select(name, node_type, general_class, node_label, x, y, node_size, n_features)
+  select(name, node_type, general_class, node_label, x, y, n_features)
 
 nodes_network <- bind_rows(
   feature_nodes_network %>%
-    select(name, node_type, general_class, node_label, x, y, node_size),
+    select(name, node_type, general_class, node_label, x, y, n_features),
   origin_nodes_network %>%
-    select(name, node_type, general_class, node_label, x, y, node_size)
+    select(name, node_type, general_class, node_label, x, y, n_features)
 ) %>%
   mutate(
     general_class = as.character(general_class),
@@ -1215,24 +1228,24 @@ graph_network <- tbl_graph(
 p_graph1a_circular_center <- ggraph(graph_network, layout = "manual", x = x, y = y) +
   geom_edge_link(
     aes(colour = general_class),
-    alpha = 0.16,
-    linewidth = 0.18,
+    alpha = 0.32,
+    linewidth = 0.28,
     show.legend = FALSE
   ) +
   geom_node_point(
     data = function(x) x %>% filter(node_type == "Feature"),
-    aes(x = x, y = y),
-    size = 0.35,
-    colour = "#222222",
-    alpha = 0.72
+    aes(x = x, y = y, colour = general_class),
+    size = 0.55,
+    alpha = 0.9,
+    show.legend = c(colour = TRUE)
   ) +
   geom_node_point(
     data = function(x) x %>% filter(node_type == "Origin"),
-    aes(x = x, y = y, fill = general_class, size = node_size),
+    aes(x = x, y = y, fill = general_class, size = n_features),
     shape = 21,
     colour = "white",
     stroke = 0.9,
-    show.legend = FALSE
+    show.legend = c(fill = FALSE, size = TRUE)
   ) +
   geom_node_text(
     data = function(x) x %>% filter(node_type == "Origin"),
@@ -1241,9 +1254,21 @@ p_graph1a_circular_center <- ggraph(graph_network, layout = "manual", x = x, y =
     fontface = "bold",
     colour = "#111111"
   ) +
-  scale_edge_colour_manual(values = class_colors) +
-  scale_fill_manual(values = class_colors) +
-  scale_size_identity() +
+  scale_edge_colour_manual(values = class_colors, guide = "none") +
+  scale_colour_manual(
+    name = "Origin class",
+    values = class_colors,
+    guide = guide_legend(override.aes = list(size = 3, alpha = 1))
+  ) +
+  scale_fill_manual(values = class_colors, guide = "none") +
+  scale_size_continuous(
+    name = "Feature count",
+    range = c(8, 18),
+    breaks = scales::breaks_pretty(n = 4),
+    guide = guide_legend(
+      override.aes = list(shape = 21, fill = "white", colour = "#333333", stroke = 0.8)
+    )
+  ) +
   coord_equal(xlim = c(-1.12, 1.12), ylim = c(-1.12, 1.12), clip = "off") +
   theme_void(base_size = 12) +
   labs(
@@ -1254,19 +1279,21 @@ p_graph1a_circular_center <- ggraph(graph_network, layout = "manual", x = x, y =
       n_distinct(edge_feature_general$general_class),
       " MetOriginDB source classes"
     ),
-    caption = "Outer ring = MAPS features. Middle nodes = general MetOriginDB source classes. Features with multiple source annotations connect to multiple class nodes."
+    caption = "Outer ring = MAPS features grouped and coloured by primary origin. Middle-node size = unique feature count. Multi-origin features connect to multiple class nodes."
   ) +
   theme(
     plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
     plot.subtitle = element_text(size = 10.5, hjust = 0.5, colour = "#444444"),
     plot.caption = element_text(size = 8.5, hjust = 0, colour = "#444444"),
-    plot.margin = margin(20, 20, 20, 20)
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.margin = margin(20, 30, 20, 20)
   )
 
 ggsave(
   graph1a_circular_center_png,
   p_graph1a_circular_center,
-  width = 12,
+  width = 14,
   height = 12,
   dpi = plot_dpi,
   bg = "white"

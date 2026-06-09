@@ -469,7 +469,7 @@ def main() -> None:
     project_dir = config_path.parent.parent
     config = load_config(config_path)
 
-    maps_file = get_nested(config, [("maps_file",), ("input", "maps_file"), ("inputs", "maps_file"), ("paths", "maps_file"), ("files", "maps_file")], default="data/maps/final-annotation-df.csv")
+    maps_file = get_nested(config, [("maps_file",), ("maps_annotation_file",), ("input", "maps_file"), ("inputs", "maps_file"), ("paths", "maps_file"), ("files", "maps_file")], default="data/maps/final-annotation-df.csv")
     metorigin_file = get_nested(config, [("metorigin_file",), ("input", "metorigin_file"), ("inputs", "metorigin_file"), ("paths", "metorigin_file"), ("files", "metorigin_file")], default="data/metorigin/MetOriginDB.csv")
     output_file = get_nested(config, [("output_file",), ("outputs", "matched_output"), ("outputs", "output_file"), ("paths", "output_file")], default="outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv")
     summary_file = get_nested(config, [("summary_file",), ("outputs", "summary_file")], default="outputs/qc_reports/metorigin_matching_summary.csv")
