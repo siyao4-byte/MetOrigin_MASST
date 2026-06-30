@@ -1,10 +1,12 @@
-# MAPS MetOrigin and domainMASST Workflow
+# MetOrigin and domainMASST Workflow (a combined workflow for origin inference with interactive visualization ouput)
 
-This project matches MAPS annotations to MetOriginDB, prepares MetOrigin-unmatched MS2 spectra for domainMASST, summarizes domainMASST JSON/TSV evidence, and produces the current Graph1/Graph2/Graph3 plots.
+This project matches annotated metabolites to MetOriginDB, prepares MetOrigin-unmatched MS2 spectra for domainMASST, summarizes domainMASST JSON/TSV evidence, and produces the current Graph1/Graph2/Graph3 plots. The main resources used are MetOriginDB https://github.com/tidymass/metorigindb , and domainMASST https://github.com/robinschmid/microbe_masst
+
+It will work on both annotated features, or features with ms2 spectra (with provided .mgf file)
 
 ## Setup
 
-Create the Python 3.10 environment:
+Clone the repository and create the Python 3.10 environment:
 
 ```powershell
 py -3.10 -m venv .venv310
@@ -24,7 +26,7 @@ The MetOrigin database should be:
 data/metorigin/MetOriginDB.csv
 ```
 
-This database is not included in this GitHub repository because the CSV is very large. Download the MetOriginDB MS1 compound database separately from the TidyMass databases page:
+This database is not included in this GitHub repository because the CSV is very large (at least 5 GB). Download the MetOriginDB MS1 compound database separately from the TidyMass databases page:
 
 ```text
 https://www.tidymass.org/databases/
