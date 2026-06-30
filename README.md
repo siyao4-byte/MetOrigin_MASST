@@ -180,6 +180,133 @@ The compact graph workflow runs Graph1, Graph2, and Graph3:
 
 Current plot outputs are PNG-only.
 
+## Matching Logic and Origin Interpretation
+
+This workflow combines two different kinds of origin evidence:
+
+```text
+MetOrigin  = compound identity -> curated compound-origin database
+domainMASST = MS/MS spectrum -> public dataset occurrence by source/domain
+```
+
+### Workflow Flow Chart
+
+```text
+Input MAPS annotation table
+        |
+        v
+Clean column names and detect key fields
+        |
+        v
+Use available identifiers:
+CID, SMILES, InChIKey, HMDB, KEGG, compound name
+        |
+        v
+Try MetOriginDB matching in priority order
+        |
+        +--> 1. PubChem CID exact match
+        |
+        +--> 2. SMILES exact match
+        |
+        +--> 3. InChIKey exact match
+        |
+        +--> 4. HMDB ID exact match
+        |
+        +--> 5. KEGG ID exact match
+        |
+        +--> 6. Compound name exact match
+        |
+        v
+If matched:
+aggregate all MetOriginDB origin records for that compound
+        |
+        v
+Export MetOrigin origin evidence:
+food, bacteria, plant, animal, human, drug, environment
+        |
+        v
+For unmatched features with MS2:
+prepare MGF queries for domainMASST
+        |
+        v
+Run domainMASST spectral search
+        |
+        v
+Summarize public-dataset spectral occurrence by domain:
+microbe, plant, animal, human, food/environment, etc.
+        |
+        v
+Merge MetOrigin + domainMASST evidence
+        |
+        v
+Generate static plots and interactive HTML report
+```
+
+### MetOrigin Matching
+
+MetOrigin asks:
+
+```text
+Does this annotated compound identity exist in MetOriginDB?
+If yes, what curated origins are associated with it?
+```
+
+Matching is sequential. Once a feature matches at one step, it is removed from the unmatched pool and is not counted again at later steps. For example, a PubChem CID match will not also be counted as a SMILES or name match.
+
+MetOriginDB can contain multiple records for the same compound. The workflow aggregates all matching MetOriginDB records before joining them back to MAPS, so one MAPS feature can be linked to multiple origins and many source details.
+
+### domainMASST Evidence
+
+domainMASST asks:
+
+```text
+Does this MS/MS spectrum occur in public datasets assigned to certain source domains?
+```
+
+The domainMASST `occurrence fraction` is a relative occurrence measure:
+
+```text
+matched spectra or records / total spectra or records available in that source group
+```
+
+It should be interpreted as public-dataset spectral prevalence, not as a direct MetOrigin-style confidence score.
+
+### Limitations
+
+Origin annotations from this workflow are evidence-supported source associations, not definitive causal origins.
+
+MetOrigin limitations:
+
+- It requires a matching identifier or exact compound name.
+- Exact SMILES/name matching can miss synonyms, salts, stereoisomers, tautomers, and different canonical SMILES.
+- MetOriginDB is not complete; no hit does not mean no biological origin.
+- One compound can occur in many domains, so Food, Bacteria, Plant, Animal, Human, Drug, or Environment labels are not exclusive.
+- Bacterial taxonomy is structured, but food/plant/animal fields are often long text lists rather than full taxonomic trees.
+- Aggregating MetOriginDB rows can collapse many species/genus records into long lists.
+
+domainMASST limitations:
+
+- Spectral occurrence is not the same as chemical identity.
+- Public datasets are biased toward well-studied organisms and sample types.
+- A spectrum found in a domain may reflect contamination, shared chemistry, diet, host-microbe exchange, or annotation ambiguity.
+- Occurrence fraction depends on database composition, not only biology.
+- One feature can appear in multiple domains, so domainMASST evidence is not mutually exclusive.
+- MASST does not always distinguish structural isomers or close analogues.
+
+Integrated interpretation:
+
+- MetOrigin confidence and domainMASST evidence are not directly equivalent.
+- Agreement between MetOrigin and domainMASST is stronger evidence, but disagreement is not necessarily an error.
+- Results should be reported as possible or supported source associations.
+
+Suggested wording:
+
+```text
+The workflow reports origin evidence from curated compound-origin annotations
+and public spectral occurrence. Results indicate supported source associations
+rather than exclusive or causal origins.
+```
+
 ## Main Outputs
 
 ```text

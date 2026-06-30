@@ -73,7 +73,7 @@ library(scales)
 
 input_file <- Sys.getenv(
   "METORIGIN_GRAPH1_INPUT_FILE",
-  unset = "C:\\Users\\siyao4\\OneDrive - The University of Melbourne\\Documents\\MAPS_MetOrigin_Matching_Project\\MAPS_MetOrigin_Matching_Project\\outputs\\metorigin_matches\\MAPS_with_MetOriginDB_origin_EXCEL_PREVIEW_truncated_details.csv"
+  unset = "C:\\Users\\siyao4\\OneDrive - The University of Melbourne\\Documents\\MAPS_MetOrigin_Matching_Project\\MAPS_MetOrigin_Matching_Project\\outputs\\metorigin_matches\\MAPS_with_MetOriginDB_origin_FULL.csv"
 )
 
 out_dir <- Sys.getenv("METORIGIN_GRAPH1_OUT_DIR", unset = "Graph1_MetOrigin_R_outputs")
@@ -469,44 +469,22 @@ make_layer3_layer4_for_class <- function(data, general_class_i, detail_col_i) {
   if (nrow(data) == 0) return(tibble())
   
   # Special handling for bacteria:
-  #   layer3 = genus
-  #   layer4 = species if available; otherwise reuse detail
+  #   Keep the static Sankey at phylum level. The full genus/species lineage is
+  #   too dense for the static plot and is better inspected in the interactive report.
   if (general_class_i == "Bacteria") {
-    genus_col <- if ("bacteria_genus" %in% names(data)) "bacteria_genus" else detail_col_i
-    species_col <- if ("bacteria_species" %in% names(data)) "bacteria_species" else NA_character_
+    phylum_col <- if ("bacteria_phylum" %in% names(data)) "bacteria_phylum" else detail_col_i
     
-    genus_long <- data %>%
-      mutate(genus_list = map(.data[[genus_col]], split_origin_detail)) %>%
-      select(feature_id, feature_label, compound_name, any_of(c("confidence_level", "annotation_type", "cid", "smiles")), genus_list) %>%
-      unnest_longer(genus_list, values_to = "layer3", keep_empty = TRUE) %>%
+    phylum_long <- data %>%
+      mutate(phylum_list = map(.data[[phylum_col]], split_origin_detail)) %>%
+      select(feature_id, feature_label, compound_name, any_of(c("confidence_level", "annotation_type", "cid", "smiles")), phylum_list) %>%
+      unnest_longer(phylum_list, values_to = "layer3", keep_empty = TRUE) %>%
       mutate(
-        layer3 = if_else(is.na(layer3) | layer3 == "", "Bacteria: genus not specified", layer3)
+        layer3 = if_else(is.na(layer3) | layer3 == "", "Bacteria: phylum not specified", layer3),
+        general_class = general_class_i,
+        layer4 = layer3
       )
     
-    if (!is.na(species_col) && species_col %in% names(data)) {
-      species_long <- data %>%
-        mutate(species_list = map(.data[[species_col]], split_origin_detail)) %>%
-        select(feature_id, species_list) %>%
-        unnest_longer(species_list, values_to = "species_value", keep_empty = TRUE) %>%
-        mutate(
-          species_value = if_else(is.na(species_value) | species_value == "", "Bacteria: species not specified", species_value)
-        )
-      
-      out <- genus_long %>%
-        left_join(species_long, by = "feature_id") %>%
-        mutate(
-          general_class = general_class_i,
-          layer4 = species_value
-        )
-    } else {
-      out <- genus_long %>%
-        mutate(
-          general_class = general_class_i,
-          layer4 = layer3
-        )
-    }
-    
-    return(out %>% select(feature_id, feature_label, compound_name, any_of(c("confidence_level", "annotation_type", "cid", "smiles")), general_class, layer3, layer4))
+    return(phylum_long %>% select(feature_id, feature_label, compound_name, any_of(c("confidence_level", "annotation_type", "cid", "smiles")), general_class, layer3, layer4))
   }
   
   if (!detail_col_i %in% names(data)) {
