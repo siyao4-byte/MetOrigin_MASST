@@ -1,6 +1,6 @@
 # MetOrigin and domainMASST Workflow (a combined workflow for origin inference with interactive visualization ouput)
 
-This project matches annotated metabolites to MetOriginDB, prepares MetOrigin-unmatched MS2 spectra for domainMASST, summarizes domainMASST JSON/TSV evidence, and produces the current Graph1/Graph2/Graph3 plots. The main resources used are MetOriginDB https://github.com/tidymass/metorigindb , and domainMASST https://github.com/robinschmid/microbe_masst
+This project matches annotated metabolites to MetOriginDB, prepares MetOrigin-unmatched MS2 spectra for domainMASST, summarizes domainMASST JSON/TSV evidence, and produces Sankey, Upset plots, and interactive html report. The main resources used are MetOriginDB https://github.com/tidymass/metorigindb , and domainMASST https://github.com/robinschmid/microbe_masst
 
 It will work on both annotated features, or features with ms2 spectra (with provided .mgf file)
 
