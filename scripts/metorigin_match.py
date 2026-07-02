@@ -10,12 +10,12 @@ MAPS feature/annotation.
 Important MetOriginDB behavior
 ------------------------------
 MetOriginDB can contain multiple rows for the same metabolite, PubChem CID, SMILES,
-HMDB ID, etc. This script aggregates all MetOriginDB rows per matching key before
-joining to MAPS.
+HMDB ID, etc. This script filters MetOriginDB to keys present in the MAPS table,
+then aggregates matching MetOriginDB rows per key before joining to MAPS.
 
 Main mappings
 -------------
-MAPS CID / cid       -> MetOriginDB PUBCHEM_COMPOUND_ID
+MAPS CID / cid       -> MetOriginDB pubchem_cid split from PUBCHEM_COMPOUND_ID
 MAPS smiles / SMILES -> MetOriginDB SMILES_ID
 
 Matching priority
@@ -88,6 +88,53 @@ def clean_id_series(s: pd.Series) -> pd.Series:
         "NULL": pd.NA, "null": pd.NA,
     })
     return out
+
+
+def split_multivalue_identifier(value: object) -> list[str]:
+    """Split MetOriginDB identifier cells such as 79437{}47205669 into keys."""
+    if pd.isna(value):
+        return []
+    text = str(value).strip()
+    if not text:
+        return []
+    for sep in ("{}", ";", "|", ","):
+        text = text.replace(sep, "|")
+    parts = []
+    seen = set()
+    for part in text.split("|"):
+        part = part.strip()
+        if part.endswith(".0"):
+            part = part[:-2]
+        if part.lower() in {"", "na", "n/a", "nan", "none", "null"}:
+            continue
+        if part not in seen:
+            seen.add(part)
+            parts.append(part)
+    return parts
+
+
+def split_pubchem_compound_and_substance_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add explicit PubChem CID/SID columns from MetOriginDB PUBCHEM_COMPOUND_ID.
+
+    Some MetOriginDB rows store values like 79437{}47205669 in one cell. The
+    first token is the PubChem compound ID (CID), while the second token can be
+    a PubChem substance ID (SID). Matching uses only the CID column.
+    """
+    df = df.copy()
+    source_col = pick_col(df, ["PUBCHEM_COMPOUND_ID", "pubchem_compound_id", "pubchem"])
+    if source_col is None:
+        return df
+
+    parts = df[source_col].apply(split_multivalue_identifier)
+    if "pubchem_cid" not in df.columns:
+        df["pubchem_cid"] = parts.apply(lambda x: x[0] if len(x) >= 1 else pd.NA)
+    if "pubchem_sid" not in df.columns:
+        df["pubchem_sid"] = parts.apply(lambda x: x[1] if len(x) >= 2 else pd.NA)
+
+    df["pubchem_cid"] = clean_id_series(df["pubchem_cid"])
+    df["pubchem_sid"] = clean_id_series(df["pubchem_sid"])
+    return df
 
 
 def clean_name_series(s: pd.Series, case_insensitive: bool = True) -> pd.Series:
@@ -175,12 +222,12 @@ def detect_metorigin_columns(metorigin: pd.DataFrame) -> Dict[str, Optional[str]
         "name": pick_col(metorigin, ["compound_name", "compound_name_id", "compound.name", "name", "metabolite_name", "title", "chemical_name"]),
         "smiles": pick_col(metorigin, ["SMILES_ID", "smiles_id", "smiles", "canonical_smiles", "isomeric_smiles", "pubchem_smiles"]),
         "inchikey": pick_col(metorigin, ["inchikey", "inchi_key", "inchi.key", "standard_inchikey"]),
-        "cid": pick_col(metorigin, ["PUBCHEM_COMPOUND_ID", "pubchem_compound_id", "cid", "pubchem_cid", "pubchem_id", "pubchem"]),
+        "cid": pick_col(metorigin, ["pubchem_cid", "PUBCHEM_COMPOUND_ID", "pubchem_compound_id", "cid", "pubchem_id", "pubchem"]),
         "hmdb": pick_col(metorigin, ["hmdb_id", "primary_hmdb_id", "hmdb", "hmdbid"]),
         "kegg": pick_col(metorigin, ["kegg_id", "kegg", "keggid"]),
     }
-    if "pubchem_compound_id" in metorigin.columns:
-        cols["cid"] = "pubchem_compound_id"
+    if "pubchem_cid" in metorigin.columns:
+        cols["cid"] = "pubchem_cid"
     if "smiles_id" in metorigin.columns:
         cols["smiles"] = "smiles_id"
     return cols
@@ -201,7 +248,7 @@ ORIGIN_DETAIL_COLUMNS = [
 ORIGIN_COLUMNS_TO_KEEP = ORIGIN_FLAG_COLUMNS + ORIGIN_DETAIL_COLUMNS
 
 METORIGIN_IDENTITY_COLUMNS = [
-    "pubchem_compound_id", "smiles_id", "compound_name", "compound_name_id",
+    "pubchem_compound_id", "pubchem_cid", "pubchem_sid", "smiles_id", "compound_name", "compound_name_id",
     "hmdb_id", "kegg_id", "inchikey", "mimedb_id", "lotus_id",
 ]
 
@@ -255,12 +302,12 @@ def collapse_unique_text(values: pd.Series, sep: str = " | ") -> str:
     return sep.join(unique_vals)
 
 
-def build_metorigin_subset(met_db: pd.DataFrame, key: str) -> pd.DataFrame:
+def build_metorigin_subset(met_db: pd.DataFrame, key: str, wanted_keys: set[str]) -> pd.DataFrame:
     """
     Build a one-row-per-key MetOriginDB lookup table.
 
-    MetOriginDB can contain multiple rows for the same key, so this aggregates
-    all rows rather than keeping the first row.
+    MetOriginDB can contain multiple rows for the same key. Filter to the MAPS
+    keys first, then aggregate matching rows rather than aggregating the full DB.
     """
     keep_cols = [key]
     for c in ORIGIN_COLUMNS_TO_KEEP:
@@ -271,6 +318,22 @@ def build_metorigin_subset(met_db: pd.DataFrame, key: str) -> pd.DataFrame:
             keep_cols.append(c)
 
     met_tmp = met_db.loc[:, keep_cols].dropna(subset=[key]).copy()
+    if met_tmp.empty:
+        return met_tmp
+    if not wanted_keys:
+        return met_tmp.iloc[0:0].copy()
+
+    if key in {"match_hmdb", "match_kegg", "match_inchikey"}:
+        met_tmp[key] = met_tmp[key].apply(split_multivalue_identifier)
+        met_tmp = met_tmp.explode(key)
+        met_tmp[key] = clean_id_series(met_tmp[key])
+        met_tmp = met_tmp.dropna(subset=[key])
+        if met_tmp.empty:
+            return met_tmp
+
+    before_filter = len(met_tmp)
+    met_tmp = met_tmp[met_tmp[key].isin(wanted_keys)].copy()
+    logging.info("MetOriginDB candidate rows for %s after MAPS-key prefilter: %s of %s", key, len(met_tmp), before_filter)
     if met_tmp.empty:
         return met_tmp
 
@@ -305,7 +368,8 @@ def join_by_key(unmatched: pd.DataFrame, met_db: pd.DataFrame, key: str, match_m
         logging.info("Skipping %s because no MAPS rows have this key.", match_method)
         return pd.DataFrame(), unmatched
 
-    met_small = build_metorigin_subset(met_db, key)
+    wanted_keys = set(clean_id_series(u[key]).dropna().astype(str).tolist())
+    met_small = build_metorigin_subset(met_db, key, wanted_keys)
     if met_small.empty:
         logging.info("Skipping %s because no MetOriginDB rows have this key.", match_method)
         return pd.DataFrame(), unmatched
@@ -405,9 +469,10 @@ def make_compact_output(df: pd.DataFrame) -> pd.DataFrame:
         "metorigin_origin_categories", "metorigin_n_origin_categories",
     ]
     metorigin_identity_cols = [
-        "metorigin_pubchem_compound_id", "metorigin_smiles_id", "metorigin_compound_name",
-        "metorigin_compound_name_id", "metorigin_hmdb_id", "metorigin_kegg_id",
-        "metorigin_inchikey", "metorigin_mimedb_id", "metorigin_lotus_id",
+        "metorigin_pubchem_compound_id", "metorigin_pubchem_cid", "metorigin_pubchem_sid",
+        "metorigin_smiles_id", "metorigin_compound_name", "metorigin_compound_name_id",
+        "metorigin_hmdb_id", "metorigin_kegg_id", "metorigin_inchikey",
+        "metorigin_mimedb_id", "metorigin_lotus_id",
     ]
     compact_cols = []
     for c in preferred_maps_cols + match_cols + ORIGIN_FLAG_COLUMNS + metorigin_identity_cols + ORIGIN_DETAIL_COLUMNS:
@@ -500,6 +565,7 @@ def main() -> None:
     metorigin = pd.read_csv(metorigin_path, low_memory=False)
     maps = clean_dataframe_columns(maps)
     metorigin = clean_dataframe_columns(metorigin)
+    metorigin = split_pubchem_compound_and_substance_ids(metorigin)
 
     logging.info("MAPS rows: %s | columns: %s", len(maps), len(maps.columns))
     logging.info("MetOriginDB rows: %s | columns: %s", len(metorigin), len(metorigin.columns))
