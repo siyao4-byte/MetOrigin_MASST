@@ -963,6 +963,49 @@ function treeToHtml(obj) {
 }
 function renderLineageTree(rows) {
   if (!rows.length) return "<p class='hint'>No expanded lineage rows available for this feature.</p>";
+  const bacteriaRows = rows.filter(r => r.origin_domain === "Bacteria");
+  const otherRows = rows.filter(r => r.origin_domain !== "Bacteria");
+  let html = "";
+  if (bacteriaRows.length) {
+    const rankOrder = ["phylum", "class_name", "order", "family", "genus", "species", "source_name"];
+    const sortedBacteriaRows = bacteriaRows.slice().sort((a,b) => {
+      const av = rankOrder.map(k => a[k] || "").join("|");
+      const bv = rankOrder.map(k => b[k] || "").join("|");
+      return av.localeCompare(bv, undefined, {numeric:true});
+    });
+    const body = sortedBacteriaRows.map(r => {
+      const lineage = [
+        r.phylum,
+        r.class_name,
+        r.order,
+        r.family,
+        r.genus,
+        r.species || r.source_name
+      ].filter(Boolean).join(" > ");
+      return `
+      <tr>
+        <td>${esc(lineage || "lineage not specified")}</td>
+        <td>${esc(r.ncbi_id || "")}</td>
+      </tr>`;
+    }).join("");
+    html += `
+      <h5>Bacteria lineages from MetOriginDB</h5>
+      <p class="hint">Each row is one MetOrigin bacteria record, ordered from broad to specific: phylum > class > order > family > genus > species. Rows are not merged into a single taxonomic tree.</p>
+      <table>
+        <tr><th>Lineage</th><th>NCBI ID</th></tr>
+        ${body}
+      </table>`;
+  }
+  if (otherRows.length) {
+    const root = {};
+    for (const r of otherRows) {
+      nestedInsert(root, [r.origin_domain || "Other origin", r.detail || r.source_name || "detail not specified"]);
+    }
+    html += `<h5>Other MetOrigin origin details</h5><div class="lineage-tree">${treeToHtml(root)}</div>`;
+  }
+  return html || "<p class='hint'>No expanded lineage rows available for this feature.</p>";
+}
+function renderLineageTreeOldMerged(rows) {
   const root = {};
   for (const r of rows) {
     if (r.origin_domain === "Bacteria") {
