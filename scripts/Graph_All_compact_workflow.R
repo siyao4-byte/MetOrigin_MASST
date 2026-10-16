@@ -6,10 +6,6 @@
 #   2. Graph 2: domainMASST Sankey/UpSet plots
 #   3. Graph 3: integrated MetOrigin + domainMASST evidence plots
 #
-# Checkpoint before this compact runner was added:
-#   backups/checkpoint_before_compact_all_graphs_20260604_095055/
-#
-# To go back, copy the checkpointed scripts and output folders back into the project root.
 ####################################################################################################
 
 
@@ -18,15 +14,13 @@
 # ==================================================================================================
 
 run_graph1_metorigin <- TRUE
-run_graph2_domainmasst <- TRUE
-run_graph3_integrated <- TRUE
+run_graph2_domainmasst <- identical(Sys.getenv("METORIGIN_INCLUDE_DOMAINMASST", "false"), "true")
+run_graph3_integrated <- run_graph2_domainmasst
 
 stop_if_a_graph_fails <- TRUE
 
-checkpoint_dir <- "backups/checkpoint_before_compact_all_graphs_20260604_095055"
-
 graph_scripts <- c(
-  Graph1_MetOrigin = "scripts/This is the testing version of graph 1.r",
+  Graph1_MetOrigin = "scripts/plot_recorded_associations.R",
   Graph2_domainMASST = "scripts/Graph2_domainMASST_sankey_and_upset.R",
   Graph3_integrated = "scripts/Graph3_integrated_origin_evidence_and_plots.R"
 )
@@ -80,7 +74,7 @@ run_graph_script <- function(label, path) {
   if (isTRUE(result)) {
     cat("\nFinished ", label, " in ", elapsed, " seconds.\n", sep = "")
   } else if (isTRUE(stop_if_a_graph_fails)) {
-    stop("Stopping because ", label, " failed. Checkpoint is available at: ", checkpoint_dir)
+    stop("Stopping because ", label, " failed. Check its inputs and dependencies.")
   }
 
   invisible(result)
@@ -94,8 +88,7 @@ run_graph_script <- function(label, path) {
 project_root <- set_project_root()
 
 cat("Project root: ", project_root, "\n", sep = "")
-cat("Checkpoint: ", checkpoint_dir, "\n", sep = "")
-cat("Plot outputs are PNG-only in the current graph scripts.\n")
+cat("Graph 1 exports PNG and PDF from complete recorded-source evidence.\n")
 
 run_flags <- c(
   Graph1_MetOrigin = run_graph1_metorigin,

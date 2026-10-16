@@ -71,7 +71,7 @@ def load_yaml(path: Path) -> Dict[str, Any]:
 
 def find_metorigin_file(run_dir: Path) -> Optional[Path]:
     candidates = [
-        run_dir / "outputs" / "metorigin_matches" / "MAPS_with_MetOriginDB_origin_EXCEL_PREVIEW_truncated_details.csv",
+        run_dir / "outputs" / "metorigin_matches" / "MAPS_with_MetOriginDB_origin_FULL.csv",
         run_dir / "outputs" / "metorigin_matches" / "MAPS_with_MetOriginDB_origin_COMPACT.csv",
         run_dir / "outputs" / "metorigin_matches" / "MAPS_with_MetOriginDB_origin.csv",
     ]
@@ -132,151 +132,31 @@ def split_detail(value: Any) -> List[str]:
 
 
 def build_lineage_rows(run_dir: Path) -> List[Dict[str, str]]:
-    full_file = find_metorigin_full_file(run_dir)
-    if not full_file:
-        return []
-    keep = [
-        "feature_id",
-        "compound_name",
-        "metorigin_matched",
-        "metorigin_match_method",
-        "from_bacteria",
-        "from_which_bacteria",
-        "bacteria_ncbi_id",
-        "bacteria_phylum",
-        "bacteria_class",
-        "bacteria_order",
-        "bacteria_family",
-        "bacteria_genus",
-        "bacteria_species",
-        "from_food",
-        "from_which_food",
-        "from_plant",
-        "from_which_plant",
-        "from_animal",
-        "from_which_animal",
-        "from_human",
-        "from_which_part",
-        "from_drug",
-        "from_which_drug",
-        "from_environment",
-        "from_which_environment",
-    ]
-    df = pd.read_csv(full_file, usecols=lambda c: c in keep, low_memory=False)
-    if df.empty:
-        return []
-    if "metorigin_matched" in df.columns:
-        df = df[df["metorigin_matched"].astype(str).str.lower().eq("true")]
-
-    rows: List[Dict[str, str]] = []
-    bacteria_cols = [
-        "from_which_bacteria",
-        "bacteria_ncbi_id",
-        "bacteria_phylum",
-        "bacteria_class",
-        "bacteria_order",
-        "bacteria_family",
-        "bacteria_genus",
-        "bacteria_species",
-    ]
-    for _, row in df.iterrows():
-        fid = clean_value(row.get("feature_id"))
-        compound_name = clean_value(row.get("compound_name"))
-        method = clean_value(row.get("metorigin_match_method"))
-        if clean_value(row.get("from_bacteria")).lower() == "yes":
-            split_cols = {col: split_detail(row.get(col)) for col in bacteria_cols}
-            max_len = max([len(v) for v in split_cols.values()] + [0])
-            emitted = 0
-            for values in zip_longest(*(split_cols[col] for col in bacteria_cols), fillvalue=""):
-                if emitted >= MAX_BACTERIA_LINEAGES_PER_FEATURE:
-                    break
-                item = dict(zip(bacteria_cols, values))
-                if not any(item.values()):
-                    continue
-                emitted += 1
-                rows.append(
-                    {
-                        "feature_id": fid,
-                        "compound_name": compound_name,
-                        "match_method": method,
-                        "origin_domain": "Bacteria",
-                        "source_name": item.get("from_which_bacteria", ""),
-                        "ncbi_id": item.get("bacteria_ncbi_id", ""),
-                        "phylum": item.get("bacteria_phylum", ""),
-                        "class_name": item.get("bacteria_class", ""),
-                        "order": item.get("bacteria_order", ""),
-                        "family": item.get("bacteria_family", ""),
-                        "genus": item.get("bacteria_genus", ""),
-                        "species": item.get("bacteria_species", ""),
-                        "detail": item.get("bacteria_species") or item.get("bacteria_genus") or item.get("bacteria_phylum", ""),
-                    }
-                )
-            if max_len > MAX_BACTERIA_LINEAGES_PER_FEATURE:
-                rows.append(
-                    {
-                        "feature_id": fid,
-                        "compound_name": compound_name,
-                        "match_method": method,
-                        "origin_domain": "Bacteria",
-                        "source_name": f"{max_len - MAX_BACTERIA_LINEAGES_PER_FEATURE} additional bacterial lineages omitted from HTML",
-                        "ncbi_id": "",
-                        "phylum": "Additional lineages",
-                        "class_name": "",
-                        "order": "",
-                        "family": "",
-                        "genus": "",
-                        "species": "",
-                        "detail": f"{max_len - MAX_BACTERIA_LINEAGES_PER_FEATURE} additional bacterial lineages omitted from HTML",
-                    }
-                )
-        for domain, col in [
-            ("Food", "from_which_food"),
-            ("Plant", "from_which_plant"),
-            ("Animal", "from_which_animal"),
-            ("Human", "from_which_part"),
-            ("Drug", "from_which_drug"),
-            ("Environment", "from_which_environment"),
-        ]:
-            flag = "from_human" if domain == "Human" else f"from_{domain.lower()}"
-            if clean_value(row.get(flag)).lower() != "yes":
-                continue
-            values = split_detail(row.get(col))
-            for value in values[:MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE]:
-                rows.append(
-                    {
-                        "feature_id": fid,
-                        "compound_name": compound_name,
-                        "match_method": method,
-                        "origin_domain": domain,
-                        "source_name": value,
-                        "ncbi_id": "",
-                        "phylum": "",
-                        "class_name": "",
-                        "order": "",
-                        "family": "",
-                        "genus": "",
-                        "species": "",
-                        "detail": value,
-                    }
-                )
-            if len(values) > MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE:
-                rows.append(
-                    {
-                        "feature_id": fid,
-                        "compound_name": compound_name,
-                        "match_method": method,
-                        "origin_domain": domain,
-                        "source_name": f"{len(values) - MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE} additional {domain.lower()} items omitted from HTML",
-                        "ncbi_id": "",
-                        "phylum": "",
-                        "class_name": "",
-                        "order": "",
-                        "family": "",
-                        "genus": "",
-                        "species": "",
-                        "detail": f"{len(values) - MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE} additional {domain.lower()} items omitted from HTML",
-                    }
-                )
+    """Read synchronized, validated lineage records; limits affect HTML only."""
+    directory = run_dir / "outputs" / "metorigin_matches"
+    path = directory / "bacterial_lineages.csv"
+    if not path.exists():
+        raise FileNotFoundError("Rebuild this run with the indexed matcher; flattened lineage columns are unsafe.")
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    fields = ["feature_id", "organism", "ncbi_id", "phylum", "class_name", "tax_order", "family", "genus", "species"]
+    df = df.drop_duplicates(fields)
+    rows = []
+    for fid, group in df.groupby("feature_id", sort=False):
+        for item in group.head(MAX_BACTERIA_LINEAGES_PER_FEATURE).to_dict("records"):
+            rows.append({**item, "origin_domain": "Bacteria", "source_name": item["organism"],
+                         "order": item["tax_order"], "detail": item["species"] or item["organism"]})
+        if len(group) > MAX_BACTERIA_LINEAGES_PER_FEATURE:
+            rows.append({"feature_id": fid, "origin_domain": "Bacteria", "source_name": "Additional complete records in bacterial_lineages.csv",
+                         "detail": str(len(group) - MAX_BACTERIA_LINEAGES_PER_FEATURE), "phylum": "Additional records (display limit)"})
+    associations = pd.read_csv(directory / "source_associations.csv", dtype=str, keep_default_na=False)
+    associations = associations[(associations.status == "Yes") & (associations.source != "bacteria")]
+    associations = associations.drop_duplicates(["feature_id", "source", "detail"])
+    for (fid, source), group in associations.groupby(["feature_id", "source"], sort=False):
+        for item in group.head(MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE).to_dict("records"):
+            rows.append({**item, "origin_domain": source.title(), "source_name": item["detail"]})
+        if len(group) > MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE:
+            rows.append({"feature_id": fid, "origin_domain": source.title(), "source_name": "Additional records in source_associations.csv",
+                         "detail": str(len(group) - MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE)})
     return rows
 
 
@@ -284,11 +164,26 @@ def build_payload(run_dir: Path, project_dir: Path) -> Dict[str, Any]:
     run_name = run_dir.name
     metorigin_file = find_metorigin_file(run_dir)
     metorigin_df = read_csv_if_exists(metorigin_file) if metorigin_file else pd.DataFrame()
+    if not metorigin_df.empty and "identity_id" in metorigin_df:
+        flag_columns = [f"from_{s}" for s in ("human", "bacteria", "plant", "animal", "food", "drug", "environment")]
+        # Aggregate before choosing a display representative; keep all source evidence.
+        combined_flags = metorigin_df.groupby("identity_id")[flag_columns].agg(
+            lambda s: "Yes" if s.eq("Yes").any() else "Unknown" if s.eq("Unknown").any() else "No")
+        metorigin_df = metorigin_df.sort_values("metorigin_matched", ascending=False).drop_duplicates("identity_id").copy()
+        metorigin_df["feature_id"] = metorigin_df["identity_id"]
+        for column in flag_columns:
+            metorigin_df[column] = metorigin_df.identity_id.map(combined_flags[column])
+        metorigin_df["metorigin_origin_categories"] = metorigin_df.apply(
+            lambda row: ";".join(column[5:] for column in flag_columns if row[column] == "Yes"), axis=1)
 
     graph1_long_path = run_dir / "Graph1_MetOrigin_R_outputs" / "Graph1a_feature_general_subclass_detail_long_table.csv"
     graph1_long = read_csv_if_exists(graph1_long_path)
     if graph1_long is None:
         graph1_long = pd.DataFrame()
+    elif not graph1_long.empty:
+        # This is an HTML display projection only. The complete CSV remains unchanged.
+        graph1_long = graph1_long.drop_duplicates(["feature_id", "general_class", "layer3", "layer4"])
+        graph1_long = graph1_long.groupby(["feature_id", "general_class"], sort=False).head(MAX_OTHER_ORIGIN_ITEMS_PER_FEATURE)
 
     graph2_long_path = run_dir / "Graph2_domainMASST_R_outputs" / "Graph2b_domainMASST_sankey_long_table.csv"
     graph2_long = read_csv_if_exists(graph2_long_path)
@@ -345,7 +240,9 @@ def build_payload(run_dir: Path, project_dir: Path) -> Dict[str, Any]:
                 ],
             )
             smiles = row_value(row, ["smiles", "metorigin_smiles_id"])
-            np_hit = np_cache.get(clean_smiles_key(smiles), {})
+            np_hit = {key: row_value(row, [key]) for key in ("np_pathway", "np_superclass", "np_class")}
+            cached = np_cache.get(clean_smiles_key(smiles), {})
+            np_hit = {key: value or cached.get(key, "") for key, value in np_hit.items()}
             np_compound_class = row_value(pd.Series(np_hit), ["np_pathway", "np_superclass", "np_class"]) if np_hit else ""
             compound_class = np_compound_class or compound_class
             feature_label = row_value(row, ["compound_name", "feature_label", "feature_usi"])
@@ -573,7 +470,7 @@ def build_payload(run_dir: Path, project_dir: Path) -> Dict[str, Any]:
 
 def write_report(payload: Dict[str, Any], out_path: Path) -> None:
     data_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
-    title = html.escape(f"Interactive Origin Report - {payload['meta']['run_name']}")
+    title = html.escape(f"Recorded Source Associations - {payload['meta']['run_name']}")
     template = """<!doctype html>
 <html lang="en">
 <head>
@@ -637,7 +534,7 @@ def write_report(payload: Dict[str, Any], out_path: Path) -> None:
     <div class="controls">
       <div><label for="confidenceFilter">Confidence level</label><select id="confidenceFilter"></select></div>
       <div><label for="evidenceFilter">Origin evidence</label><select id="evidenceFilter"></select></div>
-      <div><label>Origin</label><div id="originFilter" class="checkbox-group"></div></div>
+      <div><label>Recorded source</label><div id="originFilter" class="checkbox-group"></div></div>
       <div><label for="sourceFilter">Annotation source</label><select id="sourceFilter"></select></div>
       <div><label for="classFilter">NPClassifier class</label><select id="classFilter"></select></div>
       <div><label for="searchBox">Search compound / SMILES / CID / ID</label><input id="searchBox" placeholder="type any text"></div>
@@ -646,7 +543,8 @@ def write_report(payload: Dict[str, Any], out_path: Path) -> None:
   </section>
   <section>
     <h2>Interactive Sankey</h2>
-    <p class="hint">Hover feature nodes for confidence, annotation source, class, SMILES, CID, and identifiers. Click a feature node to open detailed origin matches.</p>
+    <p class="hint">Recorded source associations, not definitive biological origins. Human-only means only human evidence is recorded under the matching criteria, not exclusive human production. Click a feature for details.</p>
+    <p class="hint">Display limits never change analytical counts. Complete records: <a href="outputs/metorigin_matches/source_associations.csv">source associations</a> and <a href="outputs/metorigin_matches/bacterial_lineages.csv">bacterial lineages</a>.</p>
     <div id="sankeyPlot" class="plot"></div>
   </section>
   <section>
@@ -906,8 +804,8 @@ function showFeature(fid) {
     <p class="small">Feature ID: ${esc(f.feature_id)}</p>
     <p>${["CID: "+esc(f.cid), "HMDB: "+esc(f.hmdb_id), "KEGG: "+esc(f.kegg_id), "Confidence: "+esc(f.confidence_level), "Source: "+esc(f.annotation_source)].map(x => `<span class="pill">${x}</span>`).join("")}</p>
     <table>${tableFromObject({"NP pathway":f.np_pathway, "NP superclass":f.np_superclass, "NP class":f.np_class, "NP glycoside":f.np_is_glycoside, SMILES:f.smiles, Superclass:f.superclass, Subclass:f.subclass, "MetOrigin records":f.metorigin_n_database_records, Food:f.food_detail, Microbiome:f.microbiome_detail, "Human/plasma":f.human_detail, Plant:f.plant_detail, Animal:f.animal_detail, Drug:f.drug_detail, Environment:f.environment_detail, "domainMASST domains":ms.domains || "", "domainMASST subclasses":ms.subclasses || "", "Microbiome hits":ms.microbe_hits || 0, "Human/plasma hits":ms.human_plasma_hits || 0})}</table>
-    <h4>MetOrigin lineage tree</h4>${lineageTree}
-    <h4>MetOrigin origin matches</h4><table><tr><th>Origin</th><th>Subclass</th><th>Detail</th></tr>${originRows}</table>
+    <h4>Recorded bacterial taxonomy</h4>${lineageTree}
+    <h4>Recorded source associations</h4><table><tr><th>Source</th><th>Subclass</th><th>Detail</th></tr>${originRows}</table>
     <h4>domainMASST matches</h4><table><tr><th>Domain</th><th>Phylum/Subclass</th><th>Hits</th><th>Occurrence fraction</th></tr>${masstRows}</table>`;
 }
 function showNode(meta) {
@@ -1027,7 +925,7 @@ function renderLineageTreeOldMerged(rows) {
 function renderSummary() {
   const rows = [
     ["Total features in report", DATA.summary.feature_count],
-    ["MetOrigin matched features", DATA.summary.metorigin_matched_features],
+    ["MetOrigin matched identities", DATA.summary.metorigin_matched_features],
     ["domainMASST matched features", DATA.summary.domainmasst_matched_features],
     ["Integrated evidence features", DATA.summary.integrated_evidence_features],
     ["Features without any hit", DATA.summary.features_without_any_hit]
@@ -1085,6 +983,9 @@ def main() -> None:
 
     for run_dir in run_dirs:
         run_dir = run_dir.resolve()
+        if args.all_runs and not (run_dir / "outputs/metorigin_matches/bacterial_lineages.csv").exists():
+            print(f"Keeping historical report unchanged: {run_dir.name}")
+            continue
         payload = build_payload(run_dir, project_dir.resolve())
         out_path = run_dir / "interactive_origin_report.html"
         write_report(payload, out_path)

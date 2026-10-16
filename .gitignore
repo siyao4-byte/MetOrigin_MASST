@@ -1,26 +1,35 @@
-# Python environments and caches
-.venv/
-.venv310/
+# Local Python/R environments and caches
+.venv*/
+venv/
 __pycache__/
 *.py[cod]
-
-# Local input data and databases
-data/
-
-# Generated workflow outputs and run bundles
-outputs/
-runs/
-Graph1_MetOrigin_R_outputs/
-Graph2_domainMASST_R_outputs/
-Graph3_integrated_origin_R_outputs/
-Rplots.pdf
-*.pdf
-
-# Local copies of upstream tools
-external/
-
-# Local editor/runtime files
-.vscode/
+.pytest_cache/
 .Rhistory
 .RData
 .Rproj.user/
+Rplots.pdf
+
+# Inputs, database snapshots/indexes, outputs and recovery copies
+data/
+outputs/
+runs/
+backups/
+Graph1_MetOrigin_R_outputs/
+Graph2_domainMASST_R_outputs/
+Graph3_integrated_origin_R_outputs/
+external/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local configuration, credentials, editors and temporary files
+config/*.local.yaml
+config/*.local.yml
+.env
+.env.*
+!.env.example
+.vscode/
+.agents/
+.tmp/
+*.log
+*.tmp

@@ -21,6 +21,7 @@ After input setup, optionally run:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 from datetime import datetime
@@ -29,12 +30,12 @@ from typing import Iterable
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_HGMD_BASE = Path(r"Y:\MA_BPA_Microbiome\LCMS data")
+DEFAULT_HGMD_BASE = Path(os.environ.get("HGMD_BASE", str(PROJECT_ROOT / "data" / "hgmd")))
 DEFAULT_MAPS_INPUT = PROJECT_ROOT / "data" / "maps" / "final-annotation-df.csv"
 DEFAULT_MGF_INPUT = PROJECT_ROOT / "data" / "mgf" / "data_iimn_gnps.mgf"
 CONFIG_FILE = PROJECT_ROOT / "config" / "config.yaml"
 PYTHON_EXE = PROJECT_ROOT / ".venv310" / "Scripts" / "python.exe"
-RSCRIPT_EXE = Path(r"C:\Program Files\R\R-4.5.1\bin\Rscript.exe")
+RSCRIPT_EXE = Path(os.environ.get("RSCRIPT") or shutil.which("Rscript") or "Rscript")
 GRAPH_DIRS_TO_SAVE = [
     "Graph1_MetOrigin_R_outputs",
     "Graph2_domainMASST_R_outputs",
@@ -230,9 +231,16 @@ def run_command(cmd: list[str], label: str) -> None:
 def run_metorigin() -> None:
     if not PYTHON_EXE.exists():
         raise FileNotFoundError(f"Python environment not found: {PYTHON_EXE}")
+    import yaml
+    config = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+    index_path = PROJECT_ROOT / config["metorigin_index"]
+    if not index_path.exists():
+        run_command([str(PYTHON_EXE), "scripts/metorigin_index.py", "--source",
+                     str(PROJECT_ROOT / config["metorigin_file"]), "--index", str(index_path)],
+                    "Building snapshot-addressed MetOrigin index")
     run_command(
         [str(PYTHON_EXE), "scripts/metorigin_match.py", "--config", str(CONFIG_FILE)],
-        "Running MetOrigin matching",
+        "Matching recorded source associations (input PubChem IDs are CID only)",
     )
 
 

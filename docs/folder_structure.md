@@ -1,67 +1,25 @@
 # Folder Structure
 
 ```text
-MAPS_MetOrigin_Matching_Project/
-  config/
-    config.yaml
-  data/
-    maps/final-annotation-df.csv
-    metorigin/MetOriginDB.csv
-    mgf/data_iimn_gnps.mgf
-  outputs/
-    metorigin_matches/
-    qc_reports/
-    logs/
-    domainmasst_unmatched_ms2/
-  Graph1_MetOrigin_R_outputs/
-  Graph2_domainMASST_R_outputs/
-  Graph3_integrated_origin_R_outputs/
-  runs/
-    HGMD_1047/
-      data/
-      outputs/
-      Graph1_MetOrigin_R_outputs/
-      Graph2_domainMASST_R_outputs/
-      Graph3_integrated_origin_R_outputs/
-  scripts/
-    setup_and_run_workflow.py
-    metorigin_match.py
-    run_domainmasst_unmatched.ps1
-    Graph_All_compact_workflow.R
+MetOrigin_MASST/
+  config/                 Tracked templates; ignored *.local.yaml overrides
+  scripts/                Indexed matcher, reporting and optional domainMASST tools
+  tests/                  Synthetic regression tests (no study data)
+  docs/                   Usage and method documentation
+  data/                   Local inputs and database snapshots; ignored
+    maps/
+    metorigin/
+      MetOriginDB.csv
+      indexed-*/          SQLite index and snapshot manifest
+    mgf/                  Optional single-dataset spectra
+  runs/                   Per-run configuration, evidence, audits and plots; ignored
+  backups/                Local recovery copies; ignored
+  external/               Optional upstream domainMASST installation; ignored
+  .venv310/               Python environment; ignored
 ```
 
-## Input Modes
+Run PowerShell commands from the repository root. The recommended entry point is `scripts/run_indexed_workflow.py`; see the [README](../README.md) for setup, input configuration and plot-only reruns.
 
-### HGMD Mode
+The legacy single-dataset setup helper can also use root-level `outputs/` and Graph 1/2/3 output folders, all ignored by Git. It can discover HGMD folders using `--hgmd_base` or `HGMD_BASE`. Original input files are backed up before replacement. These compatibility helpers are retained because other scripts still invoke them.
 
-Use `scripts/setup_and_run_workflow.py --hgmd HGMD_xxxx` to fetch inputs from:
-
-```text
-Y:\MA_BPA_Microbiome\LCMS data\HGMD_xxxx*
-```
-
-The setup script copies:
-
-```text
-HGMD folder/final-annotation-df.csv       -> data/maps/final-annotation-df.csv
-HGMD folder/mzmine/data_iimn_gnps.mgf     -> data/mgf/data_iimn_gnps.mgf
-```
-
-Existing files in `data/maps/` and `data/mgf/` are backed up under `backups/input_files_before_setup_*`.
-
-HGMD analysis runs are saved under `runs/HGMD_xxxx/`. If that folder already exists, the old run folder is moved to `runs/HGMD_xxxx_previous_YYYYMMDD_HHMMSS/` before the fresh bundle is written. Setup-only commands do not save an output bundle.
-
-### User-File Mode
-
-If no `--hgmd` value is supplied, the workflow uses the files already present here:
-
-```text
-data/maps/final-annotation-df.csv
-data/mgf/data_iimn_gnps.mgf
-```
-
-The MetOrigin database should remain here:
-
-```text
-data/metorigin/MetOriginDB.csv
-```
+Do not delete local `data/`, `runs/` or `backups/` as part of repository cleanup. Generated files are excluded from version control, not automatically removed from disk.

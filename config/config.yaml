@@ -2,6 +2,9 @@
 
 maps_annotation_file: data/maps/final-annotation-df.csv
 metorigin_file: data/metorigin/MetOriginDB.csv
+metorigin_index: data/metorigin/indexed-20261016/metorigin.sqlite
+input_pubchem_namespace: cid
+allow_sid_fallback: false
 
 output_dir: outputs/metorigin_matches
 qc_dir: outputs/qc_reports
@@ -26,7 +29,7 @@ matching_priority:
   - kegg
   - compound_name
 
-deduplicate_metorigin_by_key: true
+deduplicate_metorigin_by_key: false
 case_insensitive_name_matching: true
 exact_smiles_only: true
 

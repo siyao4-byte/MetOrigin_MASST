@@ -45,7 +45,12 @@ graph2_masst_long_file <- "Graph2_domainMASST_R_outputs/Graph2b_domainMASST_sank
 metorigin_full_file <- "outputs/metorigin_matches/MAPS_with_MetOriginDB_origin_FULL.csv"
 masst_merged_file <- "outputs/domainmasst_unmatched_ms2/MAPS_with_MetOriginDB_plus_domainMASST_origin_evidence.csv"
 
-out_dir <- "Graph3_integrated_origin_R_outputs"
+run_dir <- Sys.getenv("METORIGIN_RUN_DIR", ".")
+graph1_long_file <- file.path(run_dir, graph1_long_file)
+graph2_masst_long_file <- file.path(run_dir, graph2_masst_long_file)
+metorigin_full_file <- file.path(run_dir, metorigin_full_file)
+masst_merged_file <- file.path(run_dir, masst_merged_file)
+out_dir <- file.path(run_dir, "Graph3_integrated_origin_R_outputs")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 source_order <- c("MetOrigin", "domainMASST")
@@ -201,12 +206,21 @@ for (f in c(graph1_long_file, graph2_masst_long_file)) {
 graph1_long <- read_csv(graph1_long_file, show_col_types = FALSE) %>%
   mutate(feature_id = as.character(feature_id))
 
+identity_map <- read_csv(metorigin_full_file, show_col_types = FALSE) %>%
+  transmute(original_feature_id = as.character(feature_id), identity_id = as.character(identity_id)) %>% distinct()
+if (anyDuplicated(identity_map$original_feature_id)) stop("Ambiguous feature-to-identity mapping")
+to_identity <- function(x) {
+  x %>% mutate(feature_id=as.character(feature_id)) %>%
+    left_join(identity_map, by=c("feature_id"="original_feature_id")) %>%
+    mutate(feature_id=coalesce(identity_id,feature_id)) %>% select(-identity_id)
+}
+
 masst_long <- read_csv(graph2_masst_long_file, show_col_types = FALSE) %>%
-  mutate(feature_id = as.character(feature_id))
+  to_identity()
 
 metorigin_extra <- if (file.exists(metorigin_full_file)) {
   read_csv(metorigin_full_file, show_col_types = FALSE) %>%
-    mutate(feature_id = as.character(feature_id)) %>%
+    mutate(feature_id = as.character(identity_id)) %>%
     select(
       feature_id,
       any_of(c("confidence_score", "metorigin_match_method", "metorigin_n_database_records", "metorigin_matched"))
@@ -218,7 +232,7 @@ metorigin_extra <- if (file.exists(metorigin_full_file)) {
 
 masst_extra <- if (file.exists(masst_merged_file)) {
   read_csv(masst_merged_file, show_col_types = FALSE) %>%
-    mutate(feature_id = as.character(feature_id)) %>%
+    select(-any_of("identity_id")) %>% to_identity() %>%
     select(
       feature_id,
       any_of(c("masst_searched", "masst_n_matches_rows", "masst_n_dataset_rows", "masst_n_library_rows", "masst_n_count_domain_rows"))
@@ -240,11 +254,11 @@ metorigin_evidence <- graph1_long %>%
     feature_label,
     compound_name = safe_chr(compound_name),
     evidence_source = "MetOrigin",
-    evidence_type = "identity_database_origin",
+    evidence_type = "identity_database_recorded_association",
     origin_domain_original = safe_chr(general_class),
     origin_domain_normalized = normalize_domain(evidence_source, origin_domain_original),
-    origin_subdomain = safe_chr(layer3_plot),
-    origin_detail = safe_chr(layer4_plot),
+    origin_subdomain = safe_chr(layer3),
+    origin_detail = safe_chr(layer4),
     confidence_level = safe_chr(confidence_level),
     confidence_score = if ("confidence_score" %in% names(.)) suppressWarnings(as.numeric(confidence_score)) else NA_real_,
     metorigin_match_method = if ("metorigin_match_method" %in% names(.)) safe_chr(metorigin_match_method) else "",
@@ -762,7 +776,7 @@ integrated_sankey_plot <- ggplot() +
   annotate("text", x = x_domain, y = 1.005, label = "Normalized Domain", fontface = "bold", size = 3.5, hjust = 0.5) +
   annotate("text", x = x_detail, y = 1.005, label = "Subclass / Detail", fontface = "bold", size = 3.5, hjust = 0.5) +
   labs(
-    title = "Integrated Origin Evidence",
+    title = "Integrated Recorded Source Associations",
     subtitle = "MetOrigin identity/database evidence and domainMASST spectral/source-context evidence kept as separate evidence sources",
     x = NULL,
     y = NULL

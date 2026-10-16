@@ -2,12 +2,11 @@
 
 maps_annotation_file: data/maps/Total-List-Of-Annotations.csv
 metorigin_file: data/metorigin/MetOriginDB.csv
+metorigin_index: data/metorigin/indexed-20261016/metorigin.sqlite
+input_pubchem_namespace: cid
+allow_sid_fallback: false
 
-output_file: runs/Total-annotation/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
-summary_file: runs/Total-annotation/outputs/qc_reports/metorigin_matching_summary.csv
-unmatched_file: runs/Total-annotation/outputs/qc_reports/metorigin_unmatched_features.csv
-column_report_file: runs/Total-annotation/outputs/qc_reports/metorigin_column_detection_report.txt
-log_file: runs/Total-annotation/outputs/logs/metorigin_match.log
+output_file: runs/total-annotations/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
 
 matching_priority:
   - cid
@@ -17,6 +16,6 @@ matching_priority:
   - kegg
   - compound_name
 
-deduplicate_metorigin_by_key: true
+deduplicate_metorigin_by_key: false
 case_insensitive_name_match: true
 exact_smiles_only: true
