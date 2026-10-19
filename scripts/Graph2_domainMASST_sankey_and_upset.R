@@ -8,8 +8,8 @@
 # - For phylogenetic/taxonomic results, collapse taxonomy to phylum level only.
 #
 # Inputs expected
-#   outputs/domainmasst_unmatched_ms2/testing_summary/domainmasst_testing_summary_feature_domain_presence.csv
-#   outputs/domainmasst_unmatched_ms2/testing_summary/domainmasst_testing_summary_json_subclasses_long.csv
+#   <METORIGIN_RUN_DIR>/outputs/domainmasst_unmatched_ms2/testing_summary/
+#   Defaults to the repository root when METORIGIN_RUN_DIR is unset.
 #
 # If these files are missing, first run:
 #   .\.venv310\Scripts\python.exe scripts\summarize_domainmasst_results.py
@@ -51,13 +51,14 @@ library(patchwork)
 # 1. User settings
 # ==================================================================================================
 
-summary_dir <- "outputs/domainmasst_unmatched_ms2/testing_summary"
+run_dir <- Sys.getenv("METORIGIN_RUN_DIR", ".")
+summary_dir <- file.path(run_dir, "outputs/domainmasst_unmatched_ms2/testing_summary")
 
 feature_domain_file <- file.path(summary_dir, "domainmasst_testing_summary_feature_domain_presence.csv")
 json_long_file <- file.path(summary_dir, "domainmasst_testing_summary_json_subclasses_long.csv")
-feature_metadata_file <- "outputs/domainmasst_unmatched_ms2/MetOrigin_unmatched_features_with_MS2.csv"
+feature_metadata_file <- file.path(run_dir, "outputs/domainmasst_unmatched_ms2/MetOrigin_unmatched_features_with_MS2.csv")
 
-out_dir <- "Graph2_domainMASST_R_outputs"
+out_dir <- file.path(run_dir, "Graph2_domainMASST_R_outputs")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # `combined` is an aggregate domain produced by domainMASST, so it duplicates domain-specific evidence.

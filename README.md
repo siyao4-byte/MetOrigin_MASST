@@ -4,141 +4,222 @@ Match metabolite annotations against a local MetOriginDB snapshot, retain all re
 
 **These are recorded source associations, not definitive biological origins.** A human-only association means only human evidence is recorded under the matching criteria; it does not establish exclusive human production. Blood, urine and faeces are occurrence sites, not necessarily sites of synthesis.
 
-## Quick Start: Windows PowerShell
+## Start here
 
-Run commands from the repository root. Python 3.10 is recommended for compatibility with the optional domainMASST tools. Calling the virtual-environment executable directly avoids activation and execution-policy issues.
+This guide assumes you have a MAPS annotation CSV for **one LC-MS/MS dataset** and its matching MGF file. Use **Windows PowerShell** in the repository folder. The MGF is needed for domainMASST; MetOrigin uses the annotation CSV and MetOriginDB.
+
+| Your goal | What to run | Main result |
+| --- | --- | --- |
+| Match annotations to MetOriginDB | [Steps 1-3](#step-1-install-the-tools) | Recorded source associations, bacterial lineages, plots and HTML |
+| Search public spectra for features MetOrigin did not match | [Steps 1-4](#step-1-install-the-tools) | domainMASST search results and merged evidence |
+| View both evidence types together | [Steps 1-5](#step-1-install-the-tools) | Integrated plots and refreshed HTML |
+
+A domainMASST search in this project begins with the **MetOrigin-unmatched** feature IDs. If you already have a completed MetOrigin run, start at Step 4.
+
+```mermaid
+flowchart TD
+    A["MAPS annotation CSV<br/>compound name, identifiers, feature ID"] --> M["Match identifiers against<br/>indexed MetOriginDB"]
+    D[("MetOriginDB snapshot")] --> M
+    M --> E["Matched table + complete<br/>source associations and bacterial lineages"]
+    E --> V1["Circular network, UpSet,<br/>Sankey and HTML report"]
+    M --> U["Find features without<br/>a MetOriginDB match"]
+    S["MGF with matching feature IDs<br/>and MS/MS spectra"] --> Q["Extract spectra for<br/>unmatched features"]
+    U --> Q
+    Q --> R["Submit spectral queries<br/>to domainMASST"]
+    R --> Z["Summarize repository matches<br/>and merge evidence"]
+    Z --> V2["domainMASST UpSet<br/>and Sankey"]
+    E --> V3["Integrated evidence plots<br/>and refreshed HTML"]
+    Z --> V3
+```
+
+MetOrigin matches **chemical identifiers** to a reference database. domainMASST looks for **spectral occurrences** in public data. Either result is evidence for follow-up; neither proves where a metabolite was made.
+
+## Step 1. Install the tools
+
+Install **Python 3.10** and R. Then open PowerShell in the repository folder. The examples below use the local Python at `.venv310\Scripts\python.exe`; run every command from the folder containing this README.
 
 ```powershell
 git clone https://github.com/siyao4-byte/MetOrigin_MASST.git
 Set-Location MetOrigin_MASST
+py -3.10 --version
 py -3.10 -m venv .venv310
 .\.venv310\Scripts\python.exe -m pip install --upgrade pip
 .\.venv310\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv310\Scripts\python.exe --version
 ```
 
-For plots, install R and set its executable path to the version installed on your computer:
+If you already cloned the repository, start at `Set-Location`. You do not need to activate the environment. On a different computer, replace `py -3.10` with the full path to your installed Python 3.10 executable.
+
+Plots use R. Set `$Rscript` to the **Rscript.exe on your computer**, then install the plotting packages once:
 
 ```powershell
 $Rscript = 'C:\Program Files\R\R-4.5.1\bin\Rscript.exe'
+Test-Path $Rscript
 & $Rscript -e "install.packages(c('tidyverse', 'patchwork', 'yaml'), repos='https://cloud.r-project.org')"
 ```
 
-The `&` is required in PowerShell when executing a quoted path or a path stored in a variable. You can omit R entirely for matching and table export.
+`Test-Path` should print `True`. If it prints `False`, find your R installation with `Get-Command Rscript -ErrorAction SilentlyContinue` or set the correct full path. You can run MetOrigin matching without R, but plots require it.
 
-### 1. Provide the Inputs
+## Step 2. Put the inputs in place
 
-Download the MetOriginDB CSV through the [TidyMass database page](https://www.tidymass.org/databases/) and retain the unmodified file at:
+Download the original **MetOriginDB.csv** from the [TidyMass database page](https://www.tidymass.org/databases/). Keep the downloaded file unchanged. For this example, put these files at:
 
 ```text
-data/metorigin/MetOriginDB.csv
+data/
+  maps/
+    final-annotation-df.csv       Your MAPS table
+  mgf/
+    data_iimn_gnps.mgf            MGF from the same dataset
+  metorigin/
+    MetOriginDB.csv               Downloaded database snapshot
 ```
 
-Place your annotation table at `data/maps/Total-List-Of-Annotations.csv`, or specify its actual path in a local configuration. Typical input columns are `compound.name`, `smiles`, `CID`, `InChIKey`, `HMDB_ID` and `KEGG_ID`; not all are required. At least one usable matching key is needed. A `feature.ID` is retained when globally unique; otherwise run-local row IDs preserve individual records.
+Create missing folders with `New-Item -ItemType Directory -Force data\maps, data\mgf, data\metorigin`, then place your files there. The folder and file names are examples; the next step lets you use another CSV path.
 
-MGF spectra are **not required** for MetOrigin matching. They are needed only for the optional domainMASST route.
+Check the MAPS CSV for a compound name or another usable key: `compound.name`, `smiles`, `CID`, `InChIKey`, `HMDB.ID` or `KEGG.ID`. The matcher accepts common spelling variants. **Input PubChem numbers are CIDs**, never SIDs. No confidence-level or MSNovelist filter is applied automatically; select the rows you intend to analyse before starting.
 
-### 2. Configure a Run
+For domainMASST, the MAPS table must also have a **unique feature ID per row** (for example `feature.ID`). The MGF `SCANS` or `TITLE` must contain the same IDs. Check a few IDs in both files before a large search. If the table repeats feature IDs across rows or combines datasets with reused IDs, first prepare a dataset-specific, one-row-per-feature table and its corresponding MGF. The indexed matcher can use run-local row IDs when input IDs repeat, but those synthetic IDs will not match the MGF.
+
+For MetOrigin alone, a combined MAPS total list is also acceptable: point `maps_annotation_file` to that CSV. Use a single-dataset table when you intend to continue to domainMASST.
+
+## Step 3. Run MetOrigin
+
+Make a private config copy and open it:
 
 ```powershell
-Copy-Item config\config_total_annotations_metorigin.yaml config\total.local.yaml
-notepad config\total.local.yaml
+Copy-Item config\config_total_annotations_metorigin.yaml config\sample.local.yaml
+notepad config\sample.local.yaml
 ```
 
-Keep local YAML files directly in `config/`, because paths are resolved relative to its parent directory, the project root. Use forward slashes inside YAML paths. Set:
+Set the following entries in that file. Keep it directly under `config/` and use forward slashes in its paths:
 
-- `maps_annotation_file`: your annotation CSV.
-- `metorigin_file`: the original database CSV.
-- `metorigin_index`: a reusable SQLite index location for this database snapshot.
-- `output_file`: a **new** run path, such as `runs/my-run/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv`.
-- Keep `input_pubchem_namespace: cid` and `allow_sid_fallback: false`.
-
-Local `*.local.yaml` configurations are ignored by Git. Do not overwrite an existing local configuration when repeating these steps.
-
-### 3. Match and Plot
-
-```powershell
-.\.venv310\Scripts\python.exe scripts\run_indexed_workflow.py --config config\total.local.yaml --plots --rscript "$Rscript"
+```yaml
+maps_annotation_file: data/maps/final-annotation-df.csv
+metorigin_file: data/metorigin/MetOriginDB.csv
+metorigin_index: data/metorigin/sample-snapshot/metorigin.sqlite
+input_pubchem_namespace: cid
+allow_sid_fallback: false
+output_file: runs/sample-01/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
 ```
 
-The runner builds a missing database index, checks the snapshot, validates input CIDs through PubChem, matches annotations and exports tables and PNG/PDF plots. Subsequent runs reuse the index and CID validation cache. The database and index are large; allow several tens of GB of free disk space for indexing and complete evidence exports.
+Keep the other options from the copied template. `sample.local.yaml` is ignored by Git. Choose a new `runs/...` folder for each new analysis; the matcher will not overwrite an existing result.
 
-Matching only:
+Run matching, plots and the HTML report together:
 
 ```powershell
-.\.venv310\Scripts\python.exe scripts\run_indexed_workflow.py --config config\total.local.yaml
+.\.venv310\Scripts\python.exe scripts\run_indexed_workflow.py --config config\sample.local.yaml --plots --html --rscript "$Rscript"
 ```
 
-Add `--html` for the interactive report. Reports can be large for complete total lists. Add `--offline` to reuse cached CID validation without contacting PubChem; unvalidated CIDs are not automatically accepted, and SID fallback remains forbidden. No confidence-level or MSNovelist exclusion is applied automatically: prepare the intended input scope before running.
+The first run builds a searchable SQLite index from the unchanged database snapshot. Allow several tens of GB of free disk space for the index and complete evidence exports. Later runs can reuse that index. The default run validates input CIDs through PubChem; it sends CID numbers, not your MGF. To work without network access using previously cached CID validation, add `--offline`. Unvalidated CIDs are not silently accepted.
 
-Existing matching outputs are protected against overwrite. For a new analysis, change `output_file` to a new run directory. To redraw existing results, do **not** rerun matching:
+After completion, check:
+
+```text
+runs/sample-01/
+  outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv
+  outputs/metorigin_matches/source_associations.csv
+  outputs/metorigin_matches/bacterial_lineages.csv
+  outputs/metorigin_matches/match_evidence.csv
+  outputs/qc_reports/metorigin_matching_summary.csv
+  Graph1_MetOrigin_R_outputs/
+  interactive_origin_report.html
+```
+
+The main CSV has one row per input annotation. `metorigin_matched` says whether a database record matched. `from_human`, `from_bacteria` and related columns summarize recorded associations. Open `source_associations.csv` for individual database records and body-site/source details, `bacterial_lineages.csv` for complete organism-to-species taxonomy, and `match_evidence.csv` for accepted, rejected and conflicting candidate links. A match by name alone is weaker than structure-supported evidence. [Matching details](docs/indexed-workflow.md) explain the identifier rules.
+
+## Step 4. Run domainMASST for unmatched MS/MS features
+
+First install the upstream search code if `external\microbe_masst\code` is absent. The setup script checks Python 3.10 and clones the upstream repository:
 
 ```powershell
-$env:METORIGIN_RUN_DIR = 'runs/my-run'
+.\scripts\setup_domainmasst_python310.ps1
+```
+
+Set the run and MGF paths once. Use the **same dataset's MGF** as in Step 2:
+
+```powershell
+$run = 'runs/sample-01'
+$mgf = 'data/mgf/data_iimn_gnps.mgf'
+```
+
+Prepare the query MGF **without submitting a search**:
+
+```powershell
+.\.venv310\Scripts\python.exe scripts\prepare_unmatched_ms2_domainmasst_merge.py --metorigin_csv "$run/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv" --mgf "$mgf" --out_dir "$run/outputs/domainmasst_unmatched_ms2"
+```
+
+Inspect `$run/outputs/domainmasst_unmatched_ms2/MetOrigin_unmatched_features_with_MS2_manifest.csv` and the companion MGF. Confirm that feature IDs and the number of spectra make sense. Only features with **no MetOriginDB match and an MS/MS spectrum in the MGF** are eligible. A zero-row manifest usually means there are no eligible spectra or the MAPS and MGF IDs do not agree.
+
+The preparation command also writes a preliminary merged CSV. At this point, its `masst_searched` field marks spectra selected for search; it does **not** mean a public search finished. Use the merged CSV written after the `--run_masst` command for search results.
+
+To search the public domainMASST service, run the same command with `--run_masst`:
+
+```powershell
+.\.venv310\Scripts\python.exe scripts\prepare_unmatched_ms2_domainmasst_merge.py --metorigin_csv "$run/outputs/metorigin_matches/MAPS_with_MetOriginDB_origin.csv" --mgf "$mgf" --out_dir "$run/outputs/domainmasst_unmatched_ms2" --run_masst
+```
+
+`--run_masst` **submits the selected MS/MS spectra to an external service**. The search can take considerably longer than local matching. The generated job and query log are kept in the domainMASST output folder. The default search is exact mode; see `--help` for cosine, mass tolerance, minimum matched signals, parallel-query and analog-mode options.
+
+After the search finishes, make the tables used by the domainMASST plots:
+
+```powershell
+.\.venv310\Scripts\python.exe scripts\summarize_domainmasst_results.py --domainmasst_dir "$run/outputs/domainmasst_unmatched_ms2/domainMASST" --out_dir "$run/outputs/domainmasst_unmatched_ms2/testing_summary"
+```
+
+The key results are:
+
+```text
+runs/sample-01/outputs/domainmasst_unmatched_ms2/
+  MetOrigin_unmatched_features_with_MS2.mgf
+  MetOrigin_unmatched_features_with_MS2_manifest.csv
+  domainMASST/                                         Raw public-search results
+  testing_summary/                                    Counts and source-detail tables
+  MAPS_with_MetOriginDB_plus_domainMASST_origin_evidence.csv
+```
+
+The merged CSV keeps MetOrigin identifier matches and domainMASST spectral-occurrence evidence in separate columns. domainMASST matches point to public spectra or datasets; they are not chemical-identification confidence levels or proof of biological production.
+
+## Step 5. Draw both evidence types and open the report
+
+Run this step after Step 4's search and summary. It generates the MetOrigin, domainMASST and integrated plots inside the same run folder, then refreshes the HTML report:
+
+If you opened a new PowerShell window, set `$Rscript` and `$run` again as shown in Steps 1 and 4.
+
+```powershell
+$env:METORIGIN_RUN_DIR = $run
+$env:METORIGIN_INCLUDE_DOMAINMASST = 'true'
+& $Rscript scripts\Graph_All_compact_workflow.R
+.\.venv310\Scripts\python.exe scripts\generate_interactive_origin_report.py --run "$run"
+Start-Process "$run/interactive_origin_report.html"
+```
+
+The principal plots are:
+
+| Folder | What to look for |
+| --- | --- |
+| `Graph1_MetOrigin_R_outputs/` | Circular source network, source-overlap UpSet and three-layer source/detail Sankey (PNG/PDF) |
+| `Graph2_domainMASST_R_outputs/` | Public-occurrence UpSet and feature-to-domain-to-source Sankey (PNG and source CSVs) |
+| `Graph3_integrated_origin_R_outputs/` | Combined UpSet, MetOrigin/domainMASST agreement matrix and integrated Sankey (PNG and source CSVs) |
+
+Open `runs/sample-01/interactive_origin_report.html` in a browser. Use its source filters and search box to find a feature, then click its node or table row to inspect recorded source details and bacterial lineages. The report links to the complete CSV evidence tables. It loads Plotly from a CDN, so interactive plots require a network connection when opening the HTML.
+
+For MetOrigin-only results, Step 3 already creates the HTML and Graph 1 plots. To redraw an existing run without rematching:
+
+```powershell
+$env:METORIGIN_RUN_DIR = 'runs/sample-01'
 $env:METORIGIN_INCLUDE_DOMAINMASST = 'false'
 & $Rscript scripts\Graph_All_compact_workflow.R
-.\.venv310\Scripts\python.exe scripts\generate_interactive_origin_report.py --run runs/my-run
+.\.venv310\Scripts\python.exe scripts\generate_interactive_origin_report.py --run runs/sample-01
 ```
 
-## Matching and Indexed Evidence
+## Common problems
 
-The canonical Python matcher checks CID, SMILES, InChIKey, HMDB, KEGG and exact normalized name. Structural conflicts and unresolved ambiguity are retained in the audit rather than silently accepted. Compatible lower-priority records can contribute additional evidence when they agree with the anchored structure.
+- **`py -3.10` is not found:** Run `py -0p` to list installed Python paths. Install Python 3.10 or use its full executable path to create `.venv310`. Continue using `.\.venv310\Scripts\python.exe` for project commands.
+- **R cannot be found:** Set `$Rscript` to your actual `Rscript.exe`. Matching and CSV export can still run without `--plots`.
+- **No spectra are selected:** Check that `feature.ID` in the MAPS table matches MGF `SCANS` or `TITLE`, that IDs are unique for this dataset, and that unmatched features have MS/MS spectra.
+- **The target MetOrigin CSV already exists:** Change `output_file` to a new `runs/...` folder. Existing runs are protected from overwrite.
+- **The database snapshot changed:** Give the new CSV a new `metorigin_index` directory; an old index will fail its checksum check.
+- **Few database matches:** Check the QC counts, identifier columns and `match_evidence.csv`. An unmatched entry is not evidence that the metabolite is novel or has no source.
+- **Large HTML is slow:** Use the PNG/PDF plots and CSV files directly. HTML limits affect display only; the exported evidence remains complete.
 
-- **Input PubChem identifiers are always CID.** CID and SID are separate namespaces; a failed CID never triggers a SID lookup.
-- Full structure keys preserve stereochemical distinctions; no connectivity-only relaxation or salt stripping is performed.
-- Name-only evidence is explicitly labelled as weaker support.
-- The original CSV is unchanged and recorded by SHA-256 and a snapshot manifest.
-- `lineage_definitions` stores each complete bacterial lineage once; `bacterial_lineages` links database records to lineage IDs. IDs are snapshot-local, not permanent taxonomy identifiers.
-- Organisms and parallel taxonomy fields are expanded together before deduplication. Missing ranks stay missing; incompatible list lengths are flagged rather than guessed.
-- Other sources are retained in `source_associations`, including individual details, status and record-level provenance. These details do not yet use shared source-definition IDs.
-- Input-to-record links are preserved in `match_evidence`. All associations remain available; top-N and report limits affect display only.
-
-Counts distinguish input rows, normalized compound-name identities with SMILES fallback, and overlapping source associations. SMILES-only entries are not automatically confirmed metabolites. See [method details](docs/indexed-workflow.md).
-
-## Outputs
-
-```text
-runs/my-run/
-  config/                         Run configuration snapshot
-  outputs/metorigin_matches/
-    MAPS_with_MetOriginDB_origin.csv
-    source_associations.csv       Complete identity-record-source evidence
-    bacterial_lineages.csv        Complete synchronized lineage evidence
-    match_evidence.csv
-    match_evidence.sqlite         Indexed candidate and selected matches
-  outputs/qc_reports/             Counts, unmatched rows and audit summaries
-  Graph1_MetOrigin_R_outputs/      PNG/PDF plots and complete plot-source tables
-  interactive_origin_report.html  Optional interactive report
-```
-
-`_FULL` and `_COMPACT` summary CSVs are compatibility aliases. Detailed source and taxonomy evidence is in the normalized tables, not repeated flattened strings. The compatibility `feature_id` in association tables is the identity ID; use the input summary and match evidence to trace individual input rows.
-
-## Optional domainMASST Workflow
-
-domainMASST tests public **spectral occurrence**, which is different from MetOriginDB identity matching. It is not run or submitted by the indexed runner. Keep upstream tools under `external/microbe_masst/` and follow their installation requirements from [microbe_masst](https://github.com/robinschmid/microbe_masst).
-
-The existing `setup_and_run_workflow.py`, `run_domainmasst_unmatched.ps1`, and Graph 2/3 scripts remain for single-dataset workflows. Run `--help` on the Python preparation script before selecting inputs:
-
-```powershell
-.\.venv310\Scripts\python.exe scripts\prepare_unmatched_ms2_domainmasst_merge.py --help
-.\.venv310\Scripts\python.exe scripts\setup_and_run_workflow.py --help
-```
-
-For HGMD input discovery, supply `--hgmd_base 'D:/LCMS-data'` or set `$env:HGMD_BASE`; no institutional network drive is assumed. Use unique dataset-local feature IDs that correspond to the MGF scans. A multi-dataset total list cannot be mapped to one MGF by repeated scan IDs alone. Review query inputs before using `--run_masst` or `-RunMasst`, which submits spectral queries to the external service.
-
-The indexed MetOrigin workflow has regression tests. The optional external domainMASST search was not rerun as part of this upgrade.
-
-## Validation and Troubleshooting
-
-```powershell
-.\.venv310\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv310\Scripts\python.exe scripts\audit_metorigin_index.py --help
-.\.venv310\Scripts\python.exe scripts\compare_indexed_run.py --help
-```
-
-- **Python not found:** install Python 3.10 with the Windows launcher, then recreate `.venv310`.
-- **Rscript not found:** correct `$Rscript` and pass `--rscript`, or put Rscript on `PATH`.
-- **Output already exists:** choose a fresh run path or use the plot-only commands above.
-- **Snapshot mismatch:** preserve the previous index and build the changed database into a new index path.
-- **Few matches:** check the named versus SMILES-only denominators, identifier availability and conflict audit. No match is not proof of biological absence.
-
-Source code, configuration templates, documentation and tests belong in Git. Local inputs, database indexes, runs, backups, environments and credentials do not. See [folder structure](docs/folder_structure.md).
+For implementation and provenance details, see [indexed workflow](docs/indexed-workflow.md) and [folder structure](docs/folder_structure.md). Inputs, indexes, run outputs and private configs are ignored by Git.
